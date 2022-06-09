@@ -1,0 +1,74 @@
+{
+  "name": "queue-node-mailer-2",
+  "version": "0.0.1",
+  "main": "dist/main.js",
+  "repository": "",
+  "author": "pf@sourcenotes.org",
+  "license": "AGPL-3.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint ./src --ext .ts,.js --fix",
+    "test": "jest",
+    "test:watch": "jest --watchAll",
+    "ts-node": "ts-node",
+    "nodemon": "nodemon"
+  },
+  "dependencies": {
+    "amqplib": "^0.9.1",
+    "chai": "^4.3.6",
+    "commander": "^9.2.0",
+    "dotenv": "^16.0.1",
+    "liquidjs": "^9.37.0",
+    "lodash": "^4.17.21",
+    "nodemailer": "^6.7.5",
+    "rascal": "^14.4.3"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.11.6",
+    "@babel/preset-env": "^7.11.5",
+    "@babel/preset-typescript": "^7.10.4",
+    "@types/amqplib": "^0.8.2",
+    "@types/chai": "^4.3.1",
+    "@types/jest": "^26.0.13",
+    "@types/lodash": "^4.14.182",
+    "@types/node": "^14.6.4",
+    "@types/nodemailer": "^6.4.4",
+    "@types/rascal": "^10.0.5",
+    "@typescript-eslint/eslint-plugin": "^4.0.1",
+    "@typescript-eslint/parser": "^4.0.1",
+    "babel-jest": "^26.3.0",
+    "eslint": "^7.8.1",
+    "eslint-config-prettier": "^6.11.0",
+    "eslint-import-resolver-typescript": "^2.3.0",
+    "eslint-plugin-import": "^2.22.0",
+    "eslint-plugin-jsx-a11y": "^6.3.1",
+    "eslint-plugin-prettier": "^3.1.4",
+    "eslint-plugin-react": "^7.20.6",
+    "husky": "^4.2.5",
+    "jest": "^26.4.2",
+    "lint-staged": "^10.3.0",
+    "nodemon": "^2.0.4",
+    "prettier": "^2.1.1",
+    "pretty-quick": "^3.0.0",
+    "ts-jest": "^26.3.0",
+    "ts-node": "^10.0.0",
+    "typescript": "^4.0.2"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged"
+    }
+  },
+  "lint-staged": {
+    "*.{js,ts}": [
+      "eslint ./src --ext .ts,.js --fix",
+      "pretty-quick",
+      "git add"
+    ]
+  },
+  "engines": {
+    "npm": ">=8.0.0",
+    "node": ">=16.0.0"
+  }
+}

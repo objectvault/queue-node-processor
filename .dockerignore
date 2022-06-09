@@ -1,0 +1,30 @@
+# Docker Stuff
+Dockerfile
+
+# GIT Stuff
+.git
+.gitignore
+
+# VSCode Stuff
+.history
+.vs_code
+
+# Addon Configuration
+.editorconfig
+.env
+.eslintrc
+.prettierrc
+cspell.json
+
+# NPM and YARN Stuff
+package-lock.json
+yarn.lock
+
+# Other Application Stuff
+.circleci
+conf
+dist
+mixins
+node_modules
+templates
+
