@@ -106,8 +106,8 @@ try {
 
   // Load Subscription Channel
   let listener: Listener | null = null;
+  const channel: string = Config.env('SUBSCRIBE', options.subscribe)
   try {
-    const channel: string = Config.env('SUBSCRIBE', options.subscribe)
     if (channel !== null) {
       // Import Subscription Listener
       const m: any = await import(`./listeners/${channel}.js`);
@@ -142,7 +142,7 @@ try {
   listener.setBroker(<rascal.BrokerAsPromised>broker)
 
   // Consume Messages from Broker Subscription
-  const subscription = await broker.subscribe('action-start');
+  const subscription = await broker.subscribe(channel);
   // @ts-ignore (ts2531) listener !== null
   listener.attach(subscription, console.error)
 } catch (e) {
