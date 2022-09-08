@@ -1,7 +1,7 @@
 {
-  "name": "queue-node-mailer-2",
+  "name": "queue-subscriber",
   "version": "0.0.1",
-  "main": "dist/main.js",
+  "main": "dist/subscriber.js",
   "repository": "",
   "author": "pf@sourcenotes.org",
   "license": "AGPL-3.0",
