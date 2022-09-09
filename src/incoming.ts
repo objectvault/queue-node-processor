@@ -14,8 +14,8 @@ import fs from 'fs/promises';
 import rascal from 'rascal';
 
 // Local Modules
-import mailer from './mailer.js';
-import utils from './utilities.js';
+import mailer from './shared/mailer.js';
+import utils from './shared/utilities.js';
 
 // MODULE VARIABLES //
 let mixinsPath : string;

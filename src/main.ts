@@ -21,8 +21,8 @@ import _ from 'lodash';
 
 // Local Modules
 import incoming from './incoming.js';
-import utils from './utilities.js';
-import mailer from './mailer.js';
+import utils from './shared/utilities.js';
+import mailer from './shared/mailer.js';
 
 async function readJSONFile(path: string, file_opts?: any): Promise<any> {
   // Is File Options an Object?
@@ -143,7 +143,7 @@ try {
 
   // START SUBSCRIPTION //
   // Consume Messages from Broker Subscription
-  const subscription = await broker.subscribe('incoming');
+  const subscription = await broker.subscribe('email_send');
   subscription
     .on('message', incoming.subscriptionHandler)
     .on('error', console.error);
