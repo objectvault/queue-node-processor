@@ -1,3 +1,3 @@
-# Node / AMQP Based Emailer
+# AMQP / Node Based Queue Processor
 
 TODO: Add Documentation
