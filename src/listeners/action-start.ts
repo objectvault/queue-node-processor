@@ -13,7 +13,7 @@ import { expect } from 'chai';
 import rascal from 'rascal';
 
 // Local Modules
-import utils from '../utilities.js';
+import utils from '../shared/utilities.js';
 import type { Listener } from './listener.js';
 
 async function processEmailAction(actions: string[], message: any): Promise<any> {
