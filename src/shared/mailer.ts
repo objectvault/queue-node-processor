@@ -112,12 +112,12 @@ async function renderTemplate(template: string | null, context?: any): Promise<s
 
 async function sendMail(message: any): Promise<string> {
   // Verify Minimum Requirements for Email Message
-  const email: any = message.email;
+  const email: any = message.params;
   expect(email.from, 'Invalid Value for "email.from"').to.be.a('string').that.is.not.empty;
   expect(email.subject, 'Invalid Value for "email.subject"').to.be.a('string').that.is.not.empty;
 
   const template: string = email.template;
-  const locale: string = utils.strings.defaultOnEmpty(message.locale, 'en_US');
+  const locale: string = utils.strings.defaultOnEmpty(email.locale, 'en_US');
 
   // Find and Render TEXT and HTML Templates
   let t: string | null = await findTemplate(
