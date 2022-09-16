@@ -32,4 +32,4 @@ RUN npm install --omit=dev
 COPY --from=builder /usr/src/app/dist /app/dist
 
 # Execute Command
-CMD ["node", "dist/main.js"]
+CMD ["node", "dist/subscriber.js"]
