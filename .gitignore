@@ -45,6 +45,7 @@ templates
 mixins
 conf
 app.config.json
+.env
 
 # lock Files for npm and yarn
 package-lock.json
