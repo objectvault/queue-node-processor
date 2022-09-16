@@ -53,12 +53,21 @@ export class Config {
     return d
   }
 
-  public loadDOTENV(path: string | null = null, throwOnError: boolean = false, opts?: DotenvConfigOptions,): Config {
-    // Import .env file
+  public loadDOTENV(noThrowOnError: boolean = true, path: string | null = null, opts?: DotenvConfigOptions,): Config {
+    // Path Provided?
+    if (path != null) { // YES: Add to Options
+      if (opts == null) {
+        opts = { path };
+      } else {
+        opts.path = path;
+      }
+    }
+
+    // Import environment file
     const result: DotenvConfigOutput = dotenv.config(opts != null ? opts : undefined);
 
-
-    if (!!throwOnError && result.error) {
+    // Should we Throw Error?
+    if (!noThrowOnError && result.error) { // YES
       throw result.error;
     }
 
