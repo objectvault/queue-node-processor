@@ -76,7 +76,7 @@ try {
   try {
     path = Config.env('DOTENV_PATH', options.dotenv)
     if (path !== null) {
-      config.loadDOTENV(path, true);
+      config.loadDOTENV(true, path);
     } else {
       config.loadDOTENV();
     }
