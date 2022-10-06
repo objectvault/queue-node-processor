@@ -10,7 +10,7 @@
 
 // NODE Modules
 import type { OptionValues } from 'commander';
-import { program } from 'commander';
+import { program, InvalidArgumentError } from 'commander';
 import rascal from 'rascal';
 import { expect } from 'chai';
 
@@ -18,6 +18,29 @@ import { expect } from 'chai';
 import { Config } from './config/config.js';
 import type { Listener } from './listeners/listener.js';
 
+// PARAMETER Helpers //
+function paramInteger(v: string) {
+  // parseInt takes a string and a radix
+  const i: number = parseInt(v, 10);
+  if (isNaN(i) || i < 1) {
+    throw new InvalidArgumentError('Not a number.');
+  }
+  return i;
+}
+
+function paramPositiveInteger(v: string) {
+  const i: number = paramInteger(v)
+  if (i < 1) {
+    throw new InvalidArgumentError('Not a positive integer.');
+  }
+  return i;
+}
+
+function sleep(ms: number): Promise<any> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
 
 // Rascal Broker Configuration
 let brokerConfig: any = null;
@@ -55,10 +78,12 @@ try {
   program
     .name('mailer')
     .description('Node Message Queue Listener')
-    .version('0.0.1')
+    .version('0.0.3')
     .option('-c, --config <path>', '(OPTIONAL) path to JSON Configuration File', './app.config.json')
     .option('-e, --dotenv <path>', '(OPTIONAL) path to Environment File')
     .option('-s, --subscribe <csv-list>', '(OPTIONAL) Comma Separated List of Subscriptions [DEFAULT all]')
+    .option('-t, --tries <integer>', '(OPTIONAL) Number of Connection Retries before Giving Up [DEFAULT 5]', paramPositiveInteger, 5)
+    .option('-w, --wait  <integer>', '(OPTIONAL) Number of Seconds to wait before Connection Retries [DEFAULT 5]', paramPositiveInteger, 5)
 
   // Parse Command Line
   program
@@ -104,16 +129,33 @@ try {
   expect(brokerConfig, 'Missing Rascal Configuration Settings').not.to.be.null;
   expect(brokerConfig, 'Invalid Rascal Configuration Settings').to.be.an('object');
 
-  // Create Broker and Attach to Server
+  // Try Parameters
+  const tries: number = options.tries;
+  const wait: number = options.wait;
+
+  // Get Rascal Configuration
   brokerConfig = rascal.withDefaultConfig(brokerConfig);
-  broker = await rascal.BrokerAsPromised.create(brokerConfig);
+
+  // LOOP: Try 'tries' times to connect
+  for (let i = 0; i < tries; ++i) {
+    try {
+      // Delay Connection Attempt
+      await sleep(wait * 1000);
+
+      // Create Broker and Attach to Server
+      broker = await rascal.BrokerAsPromised.create(brokerConfig);
+    } catch (e) {
+      console.warn(`Try [${i+1}] - Failed to Connect`)
+      console.error(e);
+    }
+  }
   expect(broker != null, 'Invalid Broker Object').to.be.true;
 
-  // Attach Broker Error Listener
+  // @ts-ignore: Attach Broker Error Listener
   broker.on('error', console.error);
 
   // START SUBSCRIPTIONS //
-  // Consume Messages from Broker Subscription
+  // @ts-ignore: Consume Messages from Broker Subscription
   const subscriptions = await broker.subscribeAll((c: rascal.SubscriptionConfig) => !c.autoCreated);
   subscriptions.forEach(async (s: rascal.SubscriberSessionAsPromised) => {
     try {
