@@ -8,16 +8,63 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+// Node Modules
 import fs from 'fs/promises';
 import type { Message } from 'amqplib';
 import { expect } from 'chai';
 import rascal from 'rascal';
+import { v4 as uuidv4 } from 'uuid';
 
 // Local Modules
 import { Config } from '../config/config.js';
 import mailer from '../shared/mailer.js';
 import utils from '../shared/utilities.js';
 import type { Listener } from './listener.js';
+
+function createNotification(message: any, code = 0): any {
+  expect(code, 'Invalid Value for "version"').to.be.a('number').that.is.gte(0);
+
+  const notify: any = message._notify
+  if (notify == null) {
+    return null;
+  }
+
+  const ot: string = notify.object;
+  const oid: string = notify.id;
+  expect(ot, 'Missing Notification Object Type').to.be.a('string').that.is.not.empty;
+  expect(oid, 'Missing ID of Object to Notify').to.be.a('string').that.is.not.empty;
+
+  // Create Basic Notification Message
+  return {
+    version: 1, // Notification Message Version
+    id: uuidv4(), // Notification ID
+    sourceType: 'email', // Source Object Type
+    sourceID: message.id, // Source Object ID
+    objectType: ot,  // Object Type
+    objectID: oid, // Object ID
+    code // Notification Code (0 == SUCCESS)
+  };
+}
+
+async function queueNotification(message: any): Promise<any> {
+  expect(_broker != null, 'Invalid _broker Object').to.be.true;
+
+  const publication = await _broker.publish('notify', message);
+
+  // Wrap Events in Promise
+  return new Promise<any>((resolve, reject) => {
+    publication
+      .on('success', (messageId: string) => {
+        resolve(message);
+      })
+      .on('return', (message: Message) => {
+        reject(new Error('Message Returned'))
+      })
+      .on('error', (err: Error, messageId: string) => {
+        reject(err)
+      });
+  })
+}
 
 async function readMostSpecificFile(files: string[], ext: string | null, file_opts: any): Promise<string | null> {
   // Return 1st Template Found
@@ -96,18 +143,7 @@ async function mergeMixins(message: any, mixins: string[], locale: string): Prom
   return message;
 }
 
-async function queueForSend(message: any): Promise<any> {
-  const publication = await broker.publish('message-ok', message);
-  publication
-    .on('success', (messageId) => {
-      return Promise.resolve(`OK [${messageId}]`);
-    })
-    .on('error', (err) => {
-      return Promise.reject(err)
-    })
-}
-
-async function processEmailMessage(types: string[], message: any): Promise<string> {
+async function processEmailMessage(types: string[], message: any): Promise<number> {
   // Generate List of Mixins to Merge
   let mixins: string[] = generateMixins(types, true);
 
@@ -119,12 +155,13 @@ async function processEmailMessage(types: string[], message: any): Promise<strin
 
   // Send EMAIL
   const id: string = await mailer.sendMail(message);
+  console.info(`Sent Email ID [${id}]`);
 
   // Queue Message as OK
-  return queueForSend(message);
+  return 0;
 }
 
-async function processMessage(types: string[], message: any): Promise<string> {
+async function processMessage(types: string[], message: any): Promise<number> {
   const subtype: string | null = types.length > 1 ? utils.strings.nullOnEmpty(types[1].trim()) : null;
   switch (subtype) {
     case 'invite':
@@ -135,41 +172,54 @@ async function processMessage(types: string[], message: any): Promise<string> {
 }
 
 async function messageListener(message: Message, content: any, ackOrNack: rascal.AckOrNack) {
+  let code: number = 0;
   try {
     // Verify Minimum Requirements for Message
     expect(content, 'Invalid Message').to.be.an('object');
     expect(content.version, 'Invalid Value for "version"').to.be.a('number').that.is.gt(0);
     expect(content.id, 'Invalid Value for "id"').to.be.a('string').that.is.not.empty;
-    expect(content.type, 'Invalid Value for "type"').to.be.a('string').that.is.not.empty;
+    expect(content.type, 'Invalid Value for "type"').to.be.an('array').that.is.not.empty;
     expect(content.params != null, 'Missing Email "params"').to.be.true;
     expect(content.params, 'Invalid Value for "params"').to.be.an('object');
     expect(content.params.to, 'Missing "to" address for email').to.be.a('string').that.is.not.empty;
     expect(content.params.template, 'Missing "to" address for email').to.be.a('string').that.is.not.empty;
-
     console.log(content)
+
+    // Current Time
+    const now: string = (new Date()).toISOString();
+
+    // Mark Message with Time Passed through Listener
+    content._times[_name] = now;
 
     // Extract Message Type
     console.info(`Processing Message [${content.version}:${content.id}]`);
-    const type: string | null = utils.strings.nullOnEmpty(content.type.trim());
-    expect(type, '"type" has no value').not.to.be.null;
+    expect(content.type[0], 'Invalid Value for "type"').to.be.a('string').to.be.equal('email');
+    const type: string[] = content.type;
 
-    // Parse Action Type
-    const types: string[] = (<string>type).split(':');
-    expect(types.length >= 1, `[${type}] is not a valid email type`).to.be.true;
-    expect(types[0] === 'email', `[${type}] is not a valid email message`).to.be.true;
-
-    const id: string = await processMessage(types, content)
-    console.info(`Email Message Processed [${content.id}-${type}]`);
+    await processMessage(type, content)
+    console.info(`Email Message Processed [${content.id}-OK]`);
     ackOrNack();
   } catch (e: any) {
+    code = 1;  // Mailer Error
     console.error(e);
     ackOrNack(e);
+  }
+
+  const notice: any = createNotification(content, code);
+  if (notice !== null) {
+    try {
+      queueNotification(notice);
+    } catch (e) {
+      console.error('Failed to Queue Notification');
+      console.info(notice);
+    }
   }
 }
 
 // MODULE VARIABLES //
 let mixinsPath: string | null;
-let broker: rascal.BrokerAsPromised;
+let _broker: rascal.BrokerAsPromised;
+let _name: string;
 
 let listener: Listener = {
   setConfig: (c: Config) => {
@@ -191,10 +241,13 @@ let listener: Listener = {
     mixinsPath = utils.strings.defaultOnEmpty(mixinsPath, './mixins')
   },
   setBroker: (b: rascal.BrokerAsPromised) => {
-    expect(b != null, 'Invalid Broker Object').to.be.true;
-    broker = b;
+    expect(b != null, 'Invalid _broker Object').to.be.true;
+    _broker = b;
   },
   attach: (subscription: rascal.SubscriberSessionAsPromised, onError?: (err: Error) => void): rascal.SubscriberSessionAsPromised => {
+    // Save Listener Name
+    _name = subscription.name;
+
     // Attach Message Listener
     subscription
       .on('message', messageListener)

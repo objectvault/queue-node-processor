@@ -8,6 +8,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+// Node Modules
 import type { Message } from 'amqplib';
 import { expect } from 'chai';
 import rascal from 'rascal';
@@ -16,29 +17,29 @@ import rascal from 'rascal';
 import utils from '../shared/utilities.js';
 import type { Listener } from './listener.js';
 
-async function processEmailAction(actions: string[], message: any): Promise<any> {
-  expect(broker != null, 'Invalid Broker Object').to.be.true;
+async function queueActionPending(message: any): Promise<any> {
+  expect(_broker != null, 'Invalid _broker Object').to.be.true;
 
-  // Change Message Type to (email:...)
-  message.type = actions.join(':')
+  const publication = await _broker.publish('action-pending', message);
 
-  const publication = await broker.publish('email-in', message);
-  publication
-    .on('success', (messageId) => {
-      return Promise.resolve(`OK [${messageId}]`);
-    })
-    .on('error', (err) => {
-      return Promise.reject(err)
-    })
+  // Wrap Events in Promise
+  return new Promise<any>((resolve, reject) => {
+    publication
+      .on('success', (mID: string) => {
+        resolve(mID);
+      })
+      .on('return', (message: Message) => {
+        reject(new Error('Message Returned'))
+      })
+      .on('error', (err: Error, messageId: string) => {
+        reject(err)
+      });
+  })
 }
 
 async function processAction(actions: string[], message: any): Promise<string> {
-  switch (actions[0]) {
-    case 'email': // Email Action
-      return processEmailAction(actions, message);
-    default:
-      throw new Error('"type" has an unrecognized value');
-  }
+  message.type = actions;
+  return queueActionPending(message);
 }
 
 async function messageListener(message: Message, content: any, ackOrNack: rascal.AckOrNack) {
@@ -56,12 +57,19 @@ async function messageListener(message: Message, content: any, ackOrNack: rascal
     const type: string | null = utils.strings.nullOnEmpty(content.type.trim());
     expect(type, '"type" has no value').not.to.be.null;
 
+    // Current Time
+    const now: string = (new Date()).toISOString();
+
+    // Mark Message with Time Passed through Listener
+    content._times = {};
+    content._times[_name] = now;
+
     // Parse Action Type
     const actions: string[] = (<string>type).split(':');
     expect(actions.length > 1, `[${type}] is not a valid action`).to.be.true;
     expect(actions[0] === 'action', `[${type}] is not a valid action`).to.be.true;
 
-    const id: string = await processAction(actions.slice(1), content)
+    const id: string = await processAction(actions, content)
     console.info(`Action Processed [${content.id}-${type}]`);
     ackOrNack();
   } catch (e: any) {
@@ -70,14 +78,18 @@ async function messageListener(message: Message, content: any, ackOrNack: rascal
   }
 }
 
-let broker: rascal.BrokerAsPromised;
+let _broker: rascal.BrokerAsPromised;
+let _name: string;
 
 let listener: Listener = {
   setBroker: (b: rascal.BrokerAsPromised) => {
-    expect(b != null, 'Invalid Broker Object').to.be.true;
-    broker = b;
+    expect(b != null, 'Invalid _broker Object').to.be.true;
+    _broker = b;
   },
   attach: (subscription: rascal.SubscriberSessionAsPromised, onError?: (err: Error) => void): rascal.SubscriberSessionAsPromised => {
+    // Save Listener Name
+    _name = subscription.name;
+
     // Attach Message Listener
     subscription
       .on('message', messageListener)
