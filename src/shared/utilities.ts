@@ -70,6 +70,16 @@ function crossJoin(level1: string | string[], level2: string[], separator = '.')
   return level1;
 }
 
+function dateNowISO8601(): string {
+  return (new Date()).toISOString();
+}
+
+function sleep(ms: number): Promise<any> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 export default {
   objects: {
     merge: deepMerge
@@ -78,5 +88,9 @@ export default {
     nullOnEmpty,
     defaultOnEmpty,
     crossJoin
-  }
+  },
+  dates: {
+    nowISO: dateNowISO8601
+  },
+  sleep
 }
