@@ -76,7 +76,7 @@ Object.keys(signals).forEach((name: string) => {
 try {
   // Initialize Command Line Settings
   program
-    .name('mailer')
+    .name('node-mq-listener')
     .description('Node Message Queue Listener')
     .version('0.0.3')
     .option('-c, --config <path>', '(OPTIONAL) path to JSON Configuration File', './app.config.json')
@@ -139,15 +139,17 @@ try {
   // LOOP: Try 'tries' times to connect
   for (let i = 0; i < tries; ++i) {
     try {
-      // Delay Connection Attempt
-      await sleep(wait * 1000);
-
       // Create Broker and Attach to Server
       broker = await rascal.BrokerAsPromised.create(brokerConfig);
+      console.info(`Broker Opened on [${i + 1}] try`);
+      break;
     } catch (e) {
-      console.warn(`Try [${i+1}] - Failed to Connect`)
+      console.warn(`Try [${i + 1}] - Failed to Connect`)
       console.error(e);
     }
+
+    // Delay Connection Attempt
+    await sleep(wait * 1000);
   }
   expect(broker != null, 'Invalid Broker Object').to.be.true;
 
