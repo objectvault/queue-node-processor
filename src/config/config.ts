@@ -16,23 +16,27 @@ import dotenv from 'dotenv';
 import { expect } from 'chai';
 import _ from 'lodash';
 
-
-// Current Config Instance
-let _instance: Config | null = null;
-
 interface MapEnvironmentPath {
   [key: string]: string;
 }
 
 export class Config {
+  // Singleton
+  protected static _instance: Config;
+
+  // JSON Configuration
   protected _json: any = null;
 
+  // HIDE Default Constructor
+  protected constructor() {
+  }
+
   public static instance(): Config {
-    if (_instance == null) {
-      _instance = new Config()
+    if (Config._instance == null) {
+      Config._instance = new Config()
     }
 
-    return _instance;
+    return Config._instance;
   }
 
   public static hasEnv(ename: string): any {
