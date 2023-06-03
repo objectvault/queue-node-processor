@@ -8,10 +8,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+// cSpell:ignore rabbitmq
+
 // NODE Modules
 import type { OptionValues } from 'commander';
 import { program, InvalidArgumentError } from 'commander';
 import rascal from 'rascal';
+import { createClient, RedisClientType } from 'redis';
 import { expect } from 'chai';
 
 // Local Modules
@@ -43,6 +46,11 @@ function sleep(ms: number): Promise<any> {
 }
 
 // Rascal Broker Configuration
+let redisConfig: any = null;
+let redisClient: RedisClientType | null = null;
+let redisConnected: boolean = false;
+
+// Rascal Broker Configuration
 let brokerConfig: any = null;
 let broker: rascal.BrokerAsPromised | null = null;
 
@@ -58,9 +66,17 @@ const signals: any = {
 const shutdown = async (name: string, id: number) => {
   console.log('shutdown!');
   console.log(`server stopped by ${name} with value ${id}`);
+
+  // Shut connection to RabbitMQ
   if (broker != null) {
     console.log('Shutting Down Rascal');
     await broker.shutdown();
+  }
+
+  // Shut connection to REDIS
+  if ((redisClient != null) && redisConnected) {
+    console.log('Shutting Down Redis');
+    await redisClient.quit();
   }
   process.exit(128 + id);
 };
@@ -123,15 +139,42 @@ try {
     throw e;
   }
 
-  // CONFIGURE AMQP Broker //
-  // Configure Transport for Node Mailer
-  brokerConfig = config.property('broker', null);
-  expect(brokerConfig, 'Missing Rascal Configuration Settings').not.to.be.null;
-  expect(brokerConfig, 'Invalid Rascal Configuration Settings').to.be.an('object');
-
   // Try Parameters
   const tries: number = options.tries;
   const wait: number = options.wait;
+
+  // CONFIGURE REDIS Client //
+  // Configure Rascal Broker
+  redisConfig = config.property('rascal', null);
+  expect(redisConfig, 'Missing Redis Configuration Settings').not.to.be.null;
+  expect(redisConfig, 'Invalid Redis Configuration Settings').to.be.an('object');
+
+  redisClient = createClient(redisConfig);
+  redisClient.on('error', console.error);
+
+  // LOOP: Try 'tries' times to connect
+  for (let i = 0; i < tries; ++i) {
+    try {
+      // Connect to REDIS
+      await redisClient.connect()
+      console.info(`REDIS Opened on [${i + 1}] try`);
+      redisConnected = true;
+      break;
+    } catch (e) {
+      console.warn(`Try [${i + 1}] - Failed to Connect to REDIS`)
+      console.error(e);
+    }
+
+    // Delay Connection Attempt
+    await sleep(wait * 1000);
+  }
+  expect(redisConnected, 'Failed to Connect to REDIS').to.be.true;
+
+  // CONFIGURE AMQP Broker //
+  // Configure Rascal Broker
+  brokerConfig = config.property('rascal', null);
+  expect(brokerConfig, 'Missing Rascal Configuration Settings').not.to.be.null;
+  expect(brokerConfig, 'Invalid Rascal Configuration Settings').to.be.an('object');
 
   // Get Rascal Configuration
   brokerConfig = rascal.withDefaultConfig(brokerConfig);
@@ -168,6 +211,12 @@ try {
       // Set Configuration for Listener
       if (l.setConfig) {
         l.setConfig(config);
+      }
+
+      // Set Configuration for Listener
+      if (l.setRedis) {
+        // @ts-ignore: Verified redisClient !== null
+        l.setRedis(redisClient);
       }
 
       // Set Configuration for Listener
