@@ -8,7 +8,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+// NODE Modules
 import rascal from 'rascal';
+import { RedisClientType } from 'redis';
 
 // Local Modules
 import type { Config } from '../config/config.js';
@@ -17,5 +19,6 @@ import type { Config } from '../config/config.js';
 export interface Listener {
   setConfig?: (config: Config) => void;
   setBroker?: (broker: rascal.BrokerAsPromised) => void;
+  setRedis?: (client: RedisClientType) => void;
   attach: (subscription: rascal.SubscriberSessionAsPromised, onError?: (err: Error) => void) => rascal.SubscriberSessionAsPromised
 };

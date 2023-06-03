@@ -42,14 +42,14 @@ function createNotification(message: any, code = 0): any {
     sourceID: message.id, // Source Object ID
     objectType: ot,  // Object Type
     objectID: oid, // Object ID
-    code // Notification Code (0 == SUCCESS)
+    code // Notification Code (>= 0  == SUCCESS, < 0 === FAILURE)
   };
 }
 
-async function queueNotification(message: any): Promise<any> {
+async function queueNotifyPending(message: any): Promise<any> {
   expect(_broker != null, 'Invalid _broker Object').to.be.true;
 
-  const publication = await _broker.publish('notify', message);
+  const publication = await _broker.publish('notify-pending', message);
 
   // Wrap Events in Promise
   return new Promise<any>((resolve, reject) => {
@@ -208,7 +208,7 @@ async function messageListener(message: Message, content: any, ackOrNack: rascal
   const notice: any = createNotification(content, code);
   if (notice !== null) {
     try {
-      queueNotification(notice);
+      queueNotifyPending(notice);
     } catch (e) {
       console.error('Failed to Queue Notification');
       console.info(notice);

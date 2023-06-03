@@ -8,55 +8,41 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-// cSpell:ignore uuidv4
-
-// Node Modules
 import type { Message } from 'amqplib';
 import { expect } from 'chai';
 import rascal from 'rascal';
+import { RedisClientType } from 'redis';
 
 // Local Modules
-import { ActionMessage } from '../shared/queue-action.js';
 import type { Listener } from './listener.js';
 
-async function requeueActionSleep(qm: ActionMessage): Promise<any> {
-  expect(_broker != null, 'Invalid Broker Object').to.be.true;
+async function processMessage(sourceID: string, exitCode: number, message: any): Promise<string|null> {
+  const key: string = `END:${sourceID}`;
 
-  const publication: rascal.PublicationSession = await _broker.publish('action-sleep', qm.message());
-
-  // Wrap Events in Promise
-  return new Promise<any>((resolve, reject) => {
-    publication
-      .on('success', (messageId: string) => {
-        resolve(qm);
-      })
-      .on('return', (m: Message) => {
-        reject(new Error('Message Returned'))
-      })
-      .on('error', (err: Error, messageId: string) => {
-        reject(err)
-      });
-  })
-}
-
-async function processAction(actions: string[], message: ActionMessage): Promise<string> {
-  return requeueActionSleep(message);
+  // Register End of Process with 24 hour Expiration Period
+  return await _redis.set(key, exitCode,{
+    EX: 24*3600
+  });
 }
 
 async function messageListener(message: Message, content: any, ackOrNack: rascal.AckOrNack) {
-
   try {
     // Verify Minimum Requirements for Message
-    const action: ActionMessage = new ActionMessage(content);
+    expect(content, 'Invalid Message').to.be.an('object');
+    expect(content.version, 'Invalid Value for "version"').to.be.a('number').that.is.gt(0);
+    expect(content.id, 'Invalid Value for "id"').to.be.a('string').that.is.not.empty;
+    expect(content.sourceID, 'Invalid Value for "sourceID"').to.be.a('string').that.is.not.empty;
+    expect(content.code, 'Invalid Value for "code"').to.be.a('number');
     console.log(content)
 
-    // Mark Message with Time Passed through Listener
-    action.logTS(_name);
+    // Notification Source
+    const sourceID: string = content.sourceID;
+    // Notification Code
+    const code: number = content.code;
 
     // Process Message
-    console.info(`Processing Message [${action.header().id()}-${action.body().type()}]`);
-    const id: string = await processAction(action.body().action().slice(1), action)
-    console.info(`Action Processed [${action.header().id()}]`);
+    const r: string|null = await processMessage(sourceID, code, content)
+    console.info(`Notification Processed [${sourceID}:${code}]`);
     ackOrNack();
   } catch (e: any) {
     console.error(e);
@@ -64,12 +50,17 @@ async function messageListener(message: Message, content: any, ackOrNack: rascal
   }
 }
 
+let _redis: RedisClientType;
 let _broker: rascal.BrokerAsPromised;
 let _name: string;
 
 let listener: Listener = {
+  setRedis: (c: RedisClientType) => {
+    expect(c != null, 'Invalid _broker Object').to.be.true;
+    _redis = c;
+  },
   setBroker: (b: rascal.BrokerAsPromised) => {
-    expect(b != null, 'Invalid Broker Object').to.be.true;
+    expect(b != null, 'Invalid Rascal Broker Object').to.be.true;
     _broker = b;
   },
   attach: (subscription: rascal.SubscriberSessionAsPromised, onError?: (err: Error) => void): rascal.SubscriberSessionAsPromised => {
@@ -79,6 +70,7 @@ let listener: Listener = {
     // Attach Message Listener
     subscription
       .on('message', messageListener)
+      // TODO on error move message to message:nok instead o dropping message
       .on('error', onError ? onError : console.error)
 
     return subscription;

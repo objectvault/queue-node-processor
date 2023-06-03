@@ -25,6 +25,25 @@ function nullOnEmpty(s: any): string | null {
   return null;
 }
 
+function deepCloneArray(source: any[]): any[] {
+  const r: any[] = [];
+  for (const v of source) {
+    if (_.isArray(v)) { // YES
+      r.push(deepCloneArray(v))
+      continue;
+    }
+
+    if (_.isObject(v)) { // YES
+      r.push(deepMerge({}, v))
+      continue;
+    }
+
+    r.push(v);
+  }
+
+  return r;
+}
+
 function deepMerge(target: any, ...sources: any[]): any {
   expect(target, 'Target is not an object').to.be.an('object');
 
@@ -38,7 +57,22 @@ function deepMerge(target: any, ...sources: any[]): any {
 
   // Merge Source Properties into Target
   for (const key in source) {
-    if (_.isObject(source[key]) && _.isObject(target[key])) {
+    // Is Source Property an Object?
+    if (_.isObject(source[key])) { // YES
+
+      // Is source an array?
+      if (_.isArray(source[key])) {
+        target[key] = deepCloneArray(source[key]);
+        continue;
+      }
+
+      // Is Target Property an Object?
+      if ((target[key] == null) || !_.isObject(target[key])) { // NO: Replace with ab Object
+        target[key] = {};
+      }
+
+
+      // Clone Source into Target
       deepMerge(target[key], source[key]);
       continue;
     }
