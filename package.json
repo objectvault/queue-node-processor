@@ -23,6 +23,7 @@
     "lodash": "^4.17.21",
     "nodemailer": "^6.7.5",
     "rascal": "^16.2.0",
+    "redis": "^4.6.4",
     "uuid": "^9.0.0"
   },
   "devDependencies": {
