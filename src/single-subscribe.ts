@@ -8,8 +8,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-// cSpell:ignore liquidjs
-
 // NODE Modules
 import dotenv from 'dotenv';
 import type { OptionValues } from 'commander';
@@ -122,7 +120,7 @@ try {
 
   // CONFIGURE AMQP Broker //
   // Configure Transport for Node Mailer
-  brokerConfig = config.property('broker', null);
+  brokerConfig = config.property('rascal', null);
   expect(brokerConfig, 'Missing Rascal Configuration Settings').not.to.be.null;
   expect(brokerConfig, 'Invalid Rascal Configuration Settings').to.be.an('object');
 
