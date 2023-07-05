@@ -14,6 +14,10 @@
 import { expect } from 'chai';
 import _ from 'lodash';
 
+// Local Modules
+import utils from './utilities.js';
+import { QueueDynamicMap } from './queue-dynamic-map.js';
+
 /* THE IDEA:
  * The Classes are Wrappers around a single data structure,
  * the idea being to write the message to ampq, all you have
@@ -21,8 +25,6 @@ import _ from 'lodash';
  * data a message contains, is stored, in the class, under a
  * single property
  */
-// Local Modules
-import utils from './utilities.js';
 
 // Queue Message: Header Data Template
 export type TQueueMessageHeader = {
@@ -44,6 +46,8 @@ export type TQueueMessage = {
 export class QueueMessageHeader {
   // WRAPPER
   private __header: TQueueMessageHeader;
+  private __mapParams: QueueDynamicMap;
+  private __mapProps: QueueDynamicMap;
 
   public constructor(h: any) {
     // Verify Header Valid
@@ -58,6 +62,8 @@ export class QueueMessageHeader {
     }
 
     this.__header = h;
+    this.__mapParams = new QueueDynamicMap(h, 'params');
+    this.__mapProps = new QueueDynamicMap(h, 'props');
   }
 
   public isValid(): boolean {
@@ -85,6 +91,14 @@ export class QueueMessageHeader {
   public created(): null | Date {
     // TODO Improve Performance oo Date Conversion only once
     return this.__header.created == null ? null : new Date(this.__header.created);
+  }
+
+  public params(): QueueDynamicMap {
+    return this.__mapParams;
+  }
+
+  public props(): QueueDynamicMap {
+    return this.__mapProps;
   }
 }
 
@@ -135,6 +149,15 @@ export class QueueMessage {
     const m: QueueMessage = new QueueMessage();
     m.associate(this.export());
     return m;
+  }
+
+  public isExpired(): boolean {
+    if (this.__header.params().has('expiration')) {
+      const now: Date = new Date();
+      const e: Date = new Date(this.__header.params().get('expiration'));
+      return now >= e;
+    }
+    return false;
   }
 
   public isValid(): boolean {

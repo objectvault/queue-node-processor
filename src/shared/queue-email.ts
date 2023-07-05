@@ -16,6 +16,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 // Local Modules
 import utils from './utilities.js';
+import { QueueDynamicMap } from './queue-dynamic-map.js';
 import type { TQueueMessage } from './queue-message.js';
 import { QueueMessage, QueueMessageHeader } from './queue-message.js';
 import { ActionMessage, TNotifications } from './queue-action.js';
@@ -25,12 +26,14 @@ type TEmailBody = {
   type: string | string[];
   params?: any;
   props?: any;
-  _notify?: TNotifications[];
+  __notify?: TNotifications[];
 }
 
 export class EmailMessageBody {
   // WRAPPERS
   private __body: TEmailBody;
+  private __mapParams: QueueDynamicMap;
+  private __mapProps: QueueDynamicMap;
 
   public constructor(b: any) {
     // Verify Minimum Requirements for Message
@@ -58,6 +61,9 @@ export class EmailMessageBody {
     b.type = type;
 
     this.__body = b;
+    this.__mapParams = new QueueDynamicMap(b, 'params');
+    this.__mapProps = new QueueDynamicMap(b, 'props');
+
   }
 
   public isValid(): boolean {
@@ -72,35 +78,35 @@ export class EmailMessageBody {
     return <string[]>(this.__body.type);
   }
 
-  public params(): any {
-    return this.__body.params == null ? null : this.__body.params;
+  public params(): QueueDynamicMap {
+    return this.__mapParams;
   }
 
-  public props(): any {
-    return this.__body.props == null ? null : this.__body.props;
+  public props(): QueueDynamicMap {
+    return this.__mapProps;
   }
 
   public notifications(): TNotifications[] {
-    return this.__body._notify == null ? [] : this.__body._notify;
+    return this.__body.__notify == null ? [] : this.__body.__notify;
   }
 
   public notify(id: string, type: string): TNotifications[] {
-    if (this.__body._notify == null) {
-      this.__body._notify = [];
+    if (this.__body.__notify == null) {
+      this.__body.__notify = [];
     }
 
     // Add Notification
-    this.__body._notify.push({
+    this.__body.__notify.push({
       id,
       type,
     });
 
-    return this.__body._notify;
+    return this.__body.__notify;
   }
 
   public deleteNotify(id: string): TNotifications[] {
     // TODO: Implement
-    return this.__body._notify == null ? [] : this.__body._notify;
+    return this.__body.__notify == null ? [] : this.__body.__notify;
   }
 }
 
@@ -195,11 +201,27 @@ export class EmailMessage {
     return m;
   }
 
+  public isExpired(): boolean {
+    return this.__message.isExpired();
+  }
+
   public isValid(): boolean {
     return this.__message.isValid() && this.__body.isValid();
   }
 
   public body(): EmailMessageBody {
     return this.__body;;
+  }
+
+  public logs(): any[] {
+    return this.__message.logs();
+  }
+
+  public log(e: any): any[] {
+    return this.__message.log(e);
+  }
+
+  public logTS(key: string): any[] {
+    return this.__message.logTS(key);
   }
 }
