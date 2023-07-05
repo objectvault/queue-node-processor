@@ -23,7 +23,7 @@ import type { Listener } from './listener.js';
 async function queueEmailIn(qm: EmailMessage): Promise<any> {
   expect(_broker != null, 'Invalid Broker Object').to.be.true;
 
-  const publication = await _broker.publish('email-in', qm.message());
+  const publication = await _broker.publish('email-inbox', qm.message());
 
   // Wrap Events in Promise
   return new Promise<any>((resolve, reject) => {
@@ -70,6 +70,12 @@ async function processEmailAction(type: string[], message: any): Promise<any> {
 }
 
 async function processAction(actions: string[], message: ActionMessage): Promise<string> {
+
+  // Is Message Expired
+  if(message.isExpired()) { // YES: Abort
+    throw new Error(`Action [${message.header().id()}] expired`);
+  }
+
   switch (actions[0]) {
     case 'email': // Email Action
       const em: EmailMessage = await processEmailAction(actions, message);

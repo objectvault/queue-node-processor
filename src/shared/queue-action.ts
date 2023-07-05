@@ -190,6 +190,10 @@ export class ActionMessage {
     return m;
   }
 
+  public isExpired(): boolean {
+    return this.__message.isExpired();
+  }
+
   public isValid(): boolean {
     return this.__message.isValid() && this.__body.isValid();
   }

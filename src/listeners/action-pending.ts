@@ -40,6 +40,11 @@ async function requeueActionSleep(qm: ActionMessage): Promise<any> {
 }
 
 async function processAction(actions: string[], message: ActionMessage): Promise<string> {
+  // Is Message Expired
+  if(message.isExpired()) { // YES: Abort
+    throw new Error(`Action [${message.header().id()}] expired`);
+  }
+
   return requeueActionSleep(message);
 }
 

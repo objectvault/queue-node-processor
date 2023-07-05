@@ -16,11 +16,18 @@ import rascal from 'rascal';
 // Local Modules
 import { ActionMessage } from '../shared/queue-action.js';
 import type { Listener } from './listener.js';
+import utils from '../shared/utilities.js';
 
-async function queueActionForProcessing(message: ActionMessage): Promise<any> {
+
+async function queueActionForProcessing(am: ActionMessage): Promise<any> {
   expect(_broker != null, 'Invalid _broker Object').to.be.true;
 
-  const publication = await _broker.publish('action-process', message.message());
+  // ALL ACTIONS: HAVE TO HAVE Expiration SET
+  // Either by: Creator or EXplicitly when being processed
+  // DEFAULT: Expire Action in 1 Hour
+  am.header().params().setIfNotSet('expiration', utils.dates.nowPlus.hours(1));
+
+  const publication = await _broker.publish('action-process', am.message());
 
   // Wrap Events in Promise
   return new Promise<any>((resolve, reject) => {
