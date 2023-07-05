@@ -8,6 +8,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+// Node Modules
 import { expect } from 'chai';
 import _ from 'lodash';
 
@@ -104,6 +105,18 @@ function crossJoin(level1: string | string[], level2: string[], separator = '.')
   return level1;
 }
 
+function nowPlusMinutes(m: number): string {
+  const d: Date = new Date();
+  d.setMinutes(d.getMinutes() + m);
+  return d.toISOString();
+}
+
+function nowPlusHours(h: number): string {
+  const d: Date = new Date();
+  d.setHours(d.getHours() + h);
+  return d.toISOString();
+}
+
 function dateNowISO8601(): string {
   return (new Date()).toISOString();
 }
@@ -124,7 +137,11 @@ export default {
     crossJoin
   },
   dates: {
-    nowISO: dateNowISO8601
+    nowISO: dateNowISO8601,
+    nowPlus: {
+      hours: nowPlusHours,
+      minutes: nowPlusMinutes
+    }
   },
   sleep
 }
