@@ -20,6 +20,7 @@ import { Config } from '../config/config.js';
 import mailer from '../shared/mailer.js';
 import utils from '../shared/utilities.js';
 import type { Listener } from './listener.js';
+import { EmailMessage, EmailMessageBody } from '../shared/queue-email.js';
 
 function createNotification(message: any, code = 0): any {
   expect(code, 'Invalid Value for "version"').to.be.a('number').that.is.gte(0);
@@ -121,7 +122,7 @@ function generateMixins(options: string[], includeAll = true): string[] {
   return mixins;
 }
 
-async function mergeMixins(message: any, mixins: string[], locale: string): Promise<any> {
+async function mergeMixins(message: EmailMessageBody, mixins: string[], locale: string): Promise<EmailMessageBody> {
   if (mixins.length) {
     let merged: any = {};
 
@@ -136,68 +137,81 @@ async function mergeMixins(message: any, mixins: string[], locale: string): Prom
       }
     }
 
-    // "message" properties override all of the properties coming in from the files
-    return utils.objects.merge(merged, message);
+    // "merged" file properties don't override existing message properties
+    return message.merge(merged, false);
   }
 
   return message;
 }
 
-async function processEmailMessage(types: string[], message: any): Promise<number> {
+async function readyEmailMessage(types: string[], message: EmailMessage): Promise<EmailMessage> {
+  const body: EmailMessageBody = message.body()
+
   // Generate List of Mixins to Merge
   let mixins: string[] = generateMixins(types, true);
 
   // Get Locales
-  const locale: string = utils.strings.defaultOnEmpty(message.locale, 'en_US');
+  const locale: string = utils.strings.defaultOnEmpty(body.params().get('locale'), 'en_US');
 
-  // Merge Mixins into the Message
-  message = await mergeMixins(message, mixins, locale);
-
-  // Send EMAIL
-  const id: string = await mailer.sendMail(message);
-  console.info(`Sent Email ID [${id}]`);
-
-  // Queue Message as OK
-  return 0;
+  // Merge Mixins into the Message Body
+  await mergeMixins(body, mixins, locale);
+  return message;
 }
 
-async function processMessage(types: string[], message: any): Promise<number> {
+function incRetry(em: EmailMessage): number {
+  const max: number = em.header().params().get('max-retries', 5);
+  let current: number = em.header().props().get('retries', 0);
+
+  // Have we Reached Max Retries?
+  current++
+  if (current > max) {
+    throw new Error(`Action [${em.header().id()}] reached retry limit of [${max}]`);
+  }
+
+  // Update Retry Counter
+  em.header().props().set('retries', current);
+  return current;
+}
+
+async function processMessage(types: string[], em: EmailMessage): Promise<number> {
+  const body: EmailMessageBody = em.body()
+
+  // Verify Minimums for Email Message
+  expect(body.params().map() != null, 'Missing Email "params"').to.be.true;
+  expect(body.params().map(), 'Invalid Value for "params"').to.be.an('object');
+  expect(body.params().get('to'), 'Missing "to" address for email').to.be.a('string').that.is.not.empty;
+  expect(body.params().get('template'), 'Missing "template" for email').to.be.a('string').that.is.not.empty;
+
+  // Test Retry Counter
+  incRetry(em);
+
   const subtype: string | null = types.length > 1 ? utils.strings.nullOnEmpty(types[1].trim()) : null;
   switch (subtype) {
     case 'invite':
-      return processEmailMessage(['email', 'invite'], message);
+      await readyEmailMessage(['email', 'invite'], em);
+      break;
     default:
-      return processEmailMessage(types, message);
+      await readyEmailMessage(types, em);
   }
+
+  // Send EMAIL
+  const id: string = await mailer.sendMail(body.body());
+  console.info(`Sent Email ID [${id}]`);
+  return 0
 }
 
 async function messageListener(message: Message, content: any, ackOrNack: rascal.AckOrNack) {
   let code: number = 0;
   try {
     // Verify Minimum Requirements for Message
-    expect(content, 'Invalid Message').to.be.an('object');
-    expect(content.version, 'Invalid Value for "version"').to.be.a('number').that.is.gt(0);
-    expect(content.id, 'Invalid Value for "id"').to.be.a('string').that.is.not.empty;
-    expect(content.type, 'Invalid Value for "type"').to.be.an('array').that.is.not.empty;
-    expect(content.params != null, 'Missing Email "params"').to.be.true;
-    expect(content.params, 'Invalid Value for "params"').to.be.an('object');
-    expect(content.params.to, 'Missing "to" address for email').to.be.a('string').that.is.not.empty;
-    expect(content.params.template, 'Missing "to" address for email').to.be.a('string').that.is.not.empty;
+    const email: EmailMessage = new EmailMessage(content);
     console.log(content)
 
-    // Current Time
-    const now: string = (new Date()).toISOString();
-
     // Mark Message with Time Passed through Listener
-    content._times[_name] = now;
+    email.logTS(_name);
 
-    // Extract Message Type
-    console.info(`Processing Message [${content.version}:${content.id}]`);
-    expect(content.type[0], 'Invalid Value for "type"').to.be.a('string').to.be.equal('email');
-    const type: string[] = content.type;
-
-    await processMessage(type, content)
-    console.info(`Email Message Processed [${content.id}-OK]`);
+    const id: number = await processMessage(email.body().action(), email);
+    console.info(`Message Processed [${email.header().id()}-${email.body().type()}]`);
     ackOrNack();
   } catch (e: any) {
     code = 1;  // Mailer Error
@@ -251,6 +265,7 @@ let listener: Listener = {
     // Attach Message Listener
     subscription
       .on('message', messageListener)
+      // TODO on error move message to message:nok instead o dropping message
       .on('error', onError ? onError : console.error)
 
     return subscription;

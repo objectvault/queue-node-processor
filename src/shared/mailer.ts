@@ -110,14 +110,14 @@ async function renderTemplate(template: string | null, context?: any): Promise<s
   return rendered
 }
 
-async function sendMail(message: any): Promise<string> {
+async function sendMail(m: any): Promise<string> {
   // Verify Minimum Requirements for Email Message
-  const email: any = message.params;
-  expect(email.from, 'Invalid Value for "email.from"').to.be.a('string').that.is.not.empty;
-  expect(email.subject, 'Invalid Value for "email.subject"').to.be.a('string').that.is.not.empty;
+  const headers: any = m.params;
+  expect(headers.from, 'Invalid Value for "email.from"').to.be.a('string').that.is.not.empty;
+  expect(headers.subject, 'Invalid Value for "email.subject"').to.be.a('string').that.is.not.empty;
 
-  const template: string = email.template;
-  const locale: string = utils.strings.defaultOnEmpty(email.locale, 'en_US');
+  const template: string = headers.template;
+  const locale: string = utils.strings.defaultOnEmpty(headers.locale, 'en_US');
 
   // Find and Render TEXT and HTML Templates
   let t: string | null = await findTemplate(
@@ -125,22 +125,22 @@ async function sendMail(message: any): Promise<string> {
       name: template, formats: 'text', locale
     }
   );
-  let text: string | null = await renderTemplate(t, message);
+  let text: string | null = await renderTemplate(t, m.props);
 
   t = await findTemplate(
     {
       name: template, formats: 'html', locale
     }
   );
-  let html: string | null = await renderTemplate(t, message);
+  let html: string | null = await renderTemplate(t, m.props);
 
   // Do we have something to send?
   if ((text != null) || (html != null)) { // YES
     // Create EMAIL Message
     const message: any = {
-      from: email.from,
-      to: email.to,       // list of receivers
-      subject: email.subject
+      from: headers.from,
+      to: headers.to,       // list of receivers
+      subject: headers.subject
     };
 
     if (text != null) {

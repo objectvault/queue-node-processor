@@ -70,12 +70,32 @@ export class EmailMessageBody {
     return this.__body.type != null;
   }
 
+  public body(): any {
+    return this.__body;
+  }
+
   public type(): string {
     return (<string[]>(this.__body.type)).join(':');
   }
 
   public action(): string[] {
     return <string[]>(this.__body.type);
+  }
+
+  public merge(o: any, overwrite = true) : EmailMessageBody{
+    if(o != null) {
+      // Do we have Body Parameters to merge?
+      if(o.params != null) { // YES
+        this.params().merge(o.params, overwrite);
+      }
+
+      // Do we have Body Properties to merge?
+      if(o.props != null) {
+        this.props().merge(o.props, overwrite);
+      }
+    }
+
+    return this;
   }
 
   public params(): QueueDynamicMap {

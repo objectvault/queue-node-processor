@@ -13,19 +13,23 @@ import { expect } from 'chai';
 import rascal from 'rascal';
 
 // Local Modules
-import utils from '../shared/utilities.js';
+import { EmailMessage, EmailMessageBody } from '../shared/queue-email.js';
 import type { Listener } from './listener.js';
 
-async function queueForProcessing(message: any): Promise<any> {
+async function queueForProcessing(em: EmailMessage): Promise<any> {
   expect(_broker != null, 'Invalid _broker Object').to.be.true;
 
-  const publication = await _broker.publish('email-pending', message);
+  // Initialize Retries if not Set
+  em.header().params().setIfNotSet('max-retries', 5);
+  em.header().props().set('retries', 0);
+
+  const publication = await _broker.publish('email-process', em.message());
 
   // Wrap Events in Promise
   return new Promise<any>((resolve, reject) => {
     publication
       .on('success', (messageId: string) => {
-        resolve(message);
+        resolve(em);
       })
       .on('return', (message: Message) => {
         reject(new Error('Message Returned'))
@@ -36,55 +40,46 @@ async function queueForProcessing(message: any): Promise<any> {
   })
 }
 
-async function processMessage(types: string[], message: any): Promise<string> {
+async function processMessage(types: string[], message: EmailMessage): Promise<string> {
+  const body: EmailMessageBody = message.body()
+
   // Verify Minimums for Email Message
-  expect(message.params != null, 'Missing Email "params"').to.be.true;
-  expect(message.params, 'Invalid Value for "params"').to.be.an('object');
-  expect(message.params.to, 'Missing "to" address for email').to.be.a('string').that.is.not.empty;
+  expect(body.params().map() != null, 'Missing Email "params"').to.be.true;
+  expect(body.params().map(), 'Invalid Value for "params"').to.be.an('object');
+  expect(body.params().get('to'), 'Missing "to" address for email').to.be.a('string').that.is.not.empty;
 
   // Is Generic Email Message?
   if (types.length > 1) { // YES: Has to have Template
     if (types[1] === 'invite') {
       switch (types[2]) {
         case 'store': // Store Invitation
-          if (message.params.template === undefined) {
-            message.params.template = 'invite-store'
+          if (!body.params().has('template')) {
+            body.params().set('template', 'invite-store')
           }
           break;
         case 'organization': // Organization Invitation
-          if (message.params.template === undefined) {
-            message.params.template = 'invite-org'
+          if (!body.params().has('template')) {
+            body.params().set('template', 'invite-org')
           }
       }
     }
   }
 
-  expect(message.params.template, 'Missing "template" for email').to.be.a('string').that.is.not.empty;
+  expect(body.params().get('template'), 'Missing "template" for email').to.be.a('string').that.is.not.empty;
   return queueForProcessing(message);
 }
 
 async function messageListener(message: Message, content: any, ackOrNack: rascal.AckOrNack) {
   try {
     // Verify Minimum Requirements for Message
-    expect(content, 'Invalid Message').to.be.an('object');
-    expect(content.version, 'Invalid Value for "version"').to.be.a('number').that.is.gt(0);
-    expect(content.id, 'Invalid Value for "id"').to.be.a('string').that.is.not.empty;
-    expect(content.type, 'Invalid Value for "type"').to.be.an('array').that.is.not.empty;
+    const email: EmailMessage = new EmailMessage(content);
     console.log(content)
 
-    // Current Time
-    const now: string = (new Date()).toISOString();
-
     // Mark Message with Time Passed through Listener
-    content._times[_name] = now;
+    email.logTS(_name);
 
-    // Extract Message Type
-    console.info(`Processing Message [${content.version}:${content.id}]`);
-    expect(content.type[0], 'Invalid Value for "type"').to.be.a('string').to.be.equal('email');
-    const type: string[] = content.type;
-
-    const id: string = await processMessage(type, content)
-    console.info(`Action Processed [${content.id}-${type.join(':')}]`);
+    const id: string = await processMessage(email.body().action(), email)
+    console.info(`Message Processed [${email.header().id()}-${email.body().type()}]`);
     ackOrNack();
   } catch (e: any) {
     console.error(e);

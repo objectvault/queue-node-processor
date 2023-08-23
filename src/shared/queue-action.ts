@@ -26,7 +26,7 @@ export type TNotifications = {
 };
 
 // Dependency Map
-export type TActionDependents = {
+export type TActionDependencies = {
   [id: string]: any
 };
 
@@ -35,7 +35,7 @@ export type TActionBody = {
   type: string | string[];
   params?: any;
   props?: any;
-  __dependents?: TActionDependents;
+  __dependencies?: TActionDependencies;
   __notify?: TNotifications[];
 }
 
@@ -84,24 +84,32 @@ export class ActionMessageBody {
   }
 
   public params(): any {
-    return this.__body.params == null ? null : this.__body.params;
+    return this.__body.params ?? null;
   }
 
   public props(): any {
-    return this.__body.props == null ? null : this.__body.props;
+    return this.__body.props ?? null;
   }
 
-  public dependents(): TActionDependents {
-    return this.__body.__dependents == null ? {} : this.__body.__dependents;
+  public dependencies(): TActionDependencies {
+    return this.__body.__dependencies ?? {};
   }
 
-  public addDependency(id: string, v: any): TActionDependents {
-    if (this.__body.__dependents == null) {
-      this.__body.__dependents = {};
+  public addDependency(id: string, v: any): TActionDependencies {
+    if (this.__body.__dependencies == null) {
+      this.__body.__dependencies = {};
     }
 
-    this.__body.__dependents[id] = v;
-    return this.__body.__dependents;
+    this.__body.__dependencies[id] = v;
+    return this.__body.__dependencies;
+  }
+
+  public resolveDependency(id: string, v: any): undefined | TActionDependencies {
+    if (this.__body.__dependencies && this.__body.__dependencies[id]) {
+      this.__body.__dependencies[id] = v;
+    }
+
+    return this.__body.__dependencies ?? {};
   }
 
   public notifications(): TNotifications[] {
@@ -109,22 +117,20 @@ export class ActionMessageBody {
   }
 
   public notify(id: string, type: string): TNotifications[] {
-    if (this.__body.__notify == null) {
-      this.__body.__notify = [];
-    }
+    const n: TNotifications[] = this.__body.__notify ?? [];
 
     // Add Notification
-    this.__body.__notify.push({
+    n.push({
       id,
       type,
     });
 
-    return this.__body.__notify;
+    return this.__body.__notify = n;
   }
 
   public deleteNotify(id: string): TNotifications[] {
     // TODO: Implement
-    return this.__body.__notify == null ? [] : this.__body.__notify;
+    return this.__body.__notify ?? [];
   }
 }
 

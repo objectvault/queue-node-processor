@@ -11,13 +11,43 @@
 // NODE Modules
 import dotenv from 'dotenv';
 import type { OptionValues } from 'commander';
-import { program } from 'commander';
+import { program, InvalidArgumentError } from 'commander';
 import rascal from 'rascal';
+import { createClient, RedisClientType } from 'redis';
 import { expect } from 'chai';
 
 // Local Modules
 import { Config } from './config/config.js';
 import type { Listener } from './listeners/listener.js';
+
+// HELPERS
+function paramInteger(v: string) {
+  // parseInt takes a string and a radix
+  const i: number = parseInt(v, 10);
+  if (isNaN(i) || i < 1) {
+    throw new InvalidArgumentError('Not a number.');
+  }
+  return i;
+}
+
+function paramPositiveInteger(v: string) {
+  const i: number = paramInteger(v)
+  if (i < 1) {
+    throw new InvalidArgumentError('Not a positive integer.');
+  }
+  return i;
+}
+
+function sleep(ms: number): Promise<any> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+// Rascal Broker Configuration
+let redisConfig: any = null;
+let redisClient: RedisClientType | null = null;
+let redisConnected: boolean = false;
 
 // Rascal Broker Configuration
 let brokerConfig: any = null;
@@ -58,7 +88,9 @@ try {
     .version('0.0.2')
     .option('-c, --config <path>', '(OPTIONAL) path to JSON Configuration File', './app.config.json')
     .option('-e, --dotenv <path>', '(OPTIONAL) path to Environment File')
-    .option('-s, --subscribe <subscription>', '(REQUIRED) Subscription Channel');
+    .option('-s, --subscribe <subscription>', '(REQUIRED) Subscription Channel')
+    .option('-t, --tries <integer>', '(OPTIONAL) Number of Connection Retries before Giving Up [DEFAULT 5]', paramPositiveInteger, 5)
+    .option('-w, --wait  <integer>', '(OPTIONAL) Number of Seconds to wait before Connection Retries [DEFAULT 5]', paramPositiveInteger, 5)
 
   // Parse Command Line
   program
@@ -102,47 +134,96 @@ try {
     throw e;
   }
 
-  // Load Subscription Channel
-  let listener: Listener | null = null;
-  const channel: string = Config.env('SUBSCRIBE', options.subscribe)
-  try {
-    if (channel !== null) {
-      // Import Subscription Listener
-      const m: any = await import(`./listeners/${channel}.js`);
-      listener = m.default
-    } else {
-      throw new Error('Application Subscription Channel not set');
+  // Try Parameters
+  const tries: number = options.tries;
+  const wait: number = options.wait;
+
+  // CONFIGURE REDIS Client //
+  // Configure Rascal Broker
+  redisConfig = config.property('redis', null);
+  expect(redisConfig, 'Missing Redis Configuration Settings').not.to.be.null;
+  expect(redisConfig, 'Invalid Redis Configuration Settings').to.be.an('object');
+
+  redisClient = createClient(redisConfig);
+  redisClient.on('error', console.error);
+
+  // LOOP: Try 'tries' times to connect
+  for (let i = 0; i < tries; ++i) {
+    try {
+      // Connect to REDIS
+      await redisClient.connect()
+      console.info(`REDIS Opened on [${i + 1}] try`);
+      redisConnected = true;
+      break;
+    } catch (e) {
+      console.warn(`Try [${i + 1}] - Failed to Connect to REDIS`)
+      console.error(e);
     }
-  } catch (e) {
-    console.error('Missing Channel or Channel Listener does not Exist');
-    throw e;
+
+    // Delay Connection Attempt
+    await sleep(wait * 1000);
   }
+  expect(redisConnected, 'Failed to Connect to REDIS').to.be.true;
 
   // CONFIGURE AMQP Broker //
-  // Configure Transport for Node Mailer
+  // Configure Rascal Broker
   brokerConfig = config.property('rascal', null);
   expect(brokerConfig, 'Missing Rascal Configuration Settings').not.to.be.null;
   expect(brokerConfig, 'Invalid Rascal Configuration Settings').to.be.an('object');
 
-  // Create Broker and Attach to Server
+  // Get Rascal Configuration
   brokerConfig = rascal.withDefaultConfig(brokerConfig);
-  broker = await rascal.BrokerAsPromised.create(brokerConfig);
+
+  // LOOP: Try 'tries' times to connect
+  for (let i = 0; i < tries; ++i) {
+    try {
+      // Create Broker and Attach to Server
+      broker = await rascal.BrokerAsPromised.create(brokerConfig);
+      console.info(`Broker Opened on [${i + 1}] try`);
+      break;
+    } catch (e) {
+      console.warn(`Try [${i + 1}] - Failed to Connect`)
+      console.error(e);
+    }
+
+    // Delay Connection Attempt
+    await sleep(wait * 1000);
+  }
   expect(broker != null, 'Invalid Broker Object').to.be.true;
 
-  // Attach Broker Error Listener
+  // @ts-ignore: Attach Broker Error Listener
   broker.on('error', console.error);
 
-  // START SUBSCRIPTION //
-  // Set Broker for Listener
-  // @ts-ignore (ts2531) listener !== null
-  expect(listener.setBroker != null, 'Invalid Listener Object').to.be.true;
-  // @ts-ignore
-  listener.setBroker(<rascal.BrokerAsPromised>broker)
+  // Load Subscription Channel
+  const channel: string = Config.env('SUBSCRIBE', options.subscribe)
+  if (channel == null) {
+    throw new Error('Application Subscription Channel not set');
+  }
 
-  // Consume Messages from Broker Subscription
+  // Import Subscription Listener
+  const m: any = await import(`./listeners/${channel}.js`);
+  let l: Listener = m.default;
+  expect(l.setBroker != null, 'Invalid Listener Object').to.be.true;
+
+  // Set Configuration for Listener?
+  if (l.setConfig) { // YES
+    l.setConfig(config);
+  }
+
+  // Set Redis for Listener?
+  if (l.setRedis) { // YES
+    // @ts-ignore: Verified redisClient !== null
+    l.setRedis(redisClient);
+  }
+
+  // Set Broker in Listener
+  // @ts-ignore (ts2531) listener.setBroker !== null
+  l.setBroker(<rascal.BrokerAsPromised>broker)
+
+  // START SUBSCRIPTION //
+  // @ts-ignore: Consume Messages from Broker Subscription
   const subscription = await broker.subscribe(channel);
-  // @ts-ignore (ts2531) listener !== null
-  listener.attach(subscription, console.error)
+  l.attach(subscription, console.error)
 } catch (e) {
   console.error(e);
   process.exit(1);

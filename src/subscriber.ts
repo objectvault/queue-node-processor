@@ -145,7 +145,7 @@ try {
 
   // CONFIGURE REDIS Client //
   // Configure Rascal Broker
-  redisConfig = config.property('rascal', null);
+  redisConfig = config.property('redis', null);
   expect(redisConfig, 'Missing Redis Configuration Settings').not.to.be.null;
   expect(redisConfig, 'Invalid Redis Configuration Settings').to.be.an('object');
 

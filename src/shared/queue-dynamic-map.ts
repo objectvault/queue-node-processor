@@ -14,6 +14,9 @@
 import { expect } from 'chai';
 import _ from 'lodash';
 
+// Local Modules
+import utils from './utilities.js';
+
 export class QueueDynamicMap {
   // WRAPPER
   private __parent: any;    // Parent Object
@@ -31,6 +34,16 @@ export class QueueDynamicMap {
 
   public map(): any {
     return this._get();
+  }
+
+  public merge(o: any, overwrite = true) {
+    if (o != null) {
+      if (overwrite) {
+        this._mergeOverwrite(o)
+      } else {
+        this._mergeNotSet(o);
+      }
+    }
   }
 
   public has(p: string): boolean {
@@ -99,6 +112,24 @@ export class QueueDynamicMap {
     } else {
       expect(m == null || typeof (m) === 'object', 'Invalid Map Value').to.be.true;
       this.__parent[this.__pname] = m;
+    }
+  }
+
+  protected _mergeOverwrite(o?: any) {
+    const m: any = this.__parent[this.__pname];
+    if (m == null) {
+      this.__parent[this.__pname] = o;
+    } else {
+      this.__parent[this.__pname] = utils.objects.merge(m, o)
+    }
+  }
+
+  protected _mergeNotSet(o?: any) {
+    const m: any = this.__parent[this.__pname];
+    if (m == null) {
+      this.__parent[this.__pname] = o;
+    } else {
+      this.__parent[this.__pname] = utils.objects.merge(o, m)
     }
   }
 }
